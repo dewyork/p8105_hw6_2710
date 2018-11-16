@@ -95,10 +95,12 @@ Comment: main estimates: mostly below 1. those with statistically sig are xxx . 
 
 ## Problem 2
 ```{r data_cleaning}
-dat <- read_csv('data/birthweight.csv') %>% 
-  mutate_at(c('babysex', 'frace', 'malform',
-              'mrace'), funs(factor(.))) %>% 
-  mutate(smoke = as.factor(ifelse(smoken > 0, 1, 0)))
+dat <- read_csv('birthweight.csv') %>%
+  mutate_at(c('babysex', 'frace', 'malform', 'mrace'), 
+            funs(factor(.))) %>%
+  mutate(smoke = as.factor(ifelse(smoken > 0, 1, 0)),
+  id = row_number()) %>%
+  select(-smoken)
   
 #check for missing data
 skimr::skim(dat)
@@ -110,6 +112,97 @@ Propose a regression model for birthweight: Lasso since 1) helps with the variab
 
 ```{r lasso}
 library(glmnet)
+
+#Data driven
+#takes care of predictors selection by regularizing the coefficient estimates of
+# the predictors that are not predictive and also reduce the variance of the prediction
+
+#Prepare train, test data 
+set.seed(1)
+train_df = sample_frac(dat, 0.8)
+test_df = anti_join(dat, train_df, by = "id")
+
+#prepare data for the model - matrix of predictors
+x_train <- model.matrix(bwt ~ . -id, train_df)[, -1] #don't want intercept column here
+y_train <- train_df$bwt  #outcome of interest
+
+
+
+#Find the best tuning parameter using cross-validation (minimize the MSE)
+set.seed(2)
+lasso_cv <- cv.glmnet(x_train, y_train, alpha = 1)
+
+#The best lambda
+best_cv <- glance(lasso_cv) %>% pull(lambda.min)
+
+
+
+#fit the best lambda on the training set
+lasso_mod <- glmnet(x_train, y_train, alpha = 1, lambda = best_cv)
+lasso_mod %>% tidy()
+
+#explain a bit about the model
+
+
+# plot of model residuals against fitted values on the test data
+#Since add_predictions and residuals do not support the glmnet package, we'll take a different route
+
+new_train_df <- train_df %>% 
+  bind_cols(., predicted = predict(lasso_mod, x_train)) %>% 
+  mutate(residuals = bwt - predicted)
+
+ggplot(data = new_train_df, aes(x = predicted, y = residuals)) + geom_point()
+
+# Residual = Observed value - Predicted value 
+
+#Consider other 2 models
+#One using length at birth and gestational age as predictors (main effects only)
+lin_main_mod <- lm(bwt ~ blength + gaweeks, data = train_df)
+# One using head circumference, length, sex, and all interactions (including the three-way interaction) between these
+lin_interact_mod <- lm(bwt ~ blength*bhead*babysex, data = train_df)
+
+train_df %>% add_predictions(lin_main_mod) %>% 
+  add_residuals(lin_main_mod) %>% 
+  ggplot(aes(x = pred, y = resid)) + geom_point()
+
+train_df %>% add_predictions(lin_interact_mod) %>% 
+  add_residuals(lin_interact_mod) %>% 
+  ggplot(aes(x = pred, y = resid)) + geom_point()
+
+
+##Comparison of 3 models
+cv_df <- crossv_mc(dat, 100) %>% 
+  mutate(train = map(train, as_tibble),
+         test = map(test, as_tibble))
+
+#Write function so that glmnet can operate in map context
+lasso_mod_func <- function(train, test){
+  #set up matrix for training set
+  x <- model.matrix(bwt ~ . -id, train)[, -1] #don't want intercept column here
+  y <- train$bwt  #outcome of interest
+  lasso_mod <- glmnet(x, y, alpha = 1, lambda = best_cv)
+  #set up matrix for test set
+  x_test <- model.matrix(bwt ~ . -id, test)[, -1]
+  y_test <- test$bwt
+  predicted <- predict(lasso_mod, x_test)
+  rmse_lasso_mod <- sqrt((sum(predicted - y_test)^2)/length(y_test))
+  return(rmse_lasso_mod)
+}
+
+cv_df = 
+  cv_df %>% 
+  mutate(lin_main_mod = map(train, ~lm(bwt ~ blength + gaweeks, data = .x)),
+         lin_interact_mod = map(train, ~lm(bwt ~ blength*bhead*babysex, data = .x))) %>% 
+  mutate(rmse_lin_main_mod = map2_dbl(lin_main_mod, test, ~rmse(model = .x, data = .y)),
+         rmse_lin_interact_mod = map2_dbl(lin_interact_mod, test, ~rmse(model = .x, data = .y)),
+         rmse_lasso_mod = map2_dbl(train, test, ~lasso_mod_func(train = .x, test = .y)))
+
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  gather(key = model, value = rmse) %>% 
+  mutate(model = str_replace(model, "rmse_", ""),
+         model = fct_inorder(model)) %>% 
+  ggplot(aes(x = model, y = rmse)) + geom_violin()
 
 
 ```
