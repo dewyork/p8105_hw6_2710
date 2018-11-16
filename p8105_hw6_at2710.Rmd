@@ -94,5 +94,23 @@ glm_or_ci_function <- function(dat){
 Comment: main estimates: mostly below 1. those with statistically sig are xxx . some noteworthy city where the trend is reversed abc
 
 ## Problem 2
+```{r data_cleaning}
+dat <- read_csv('data/birthweight.csv') %>% 
+  mutate_at(c('babysex', 'frace', 'malform',
+              'mrace'), funs(factor(.))) %>% 
+  mutate(smoke = as.factor(ifelse(smoken > 0, 1, 0)))
+  
+#check for missing data
+skimr::skim(dat)
+```
 
+first create smoking binary variable from `smoken` since the data is zero heavy and wouldn't make much sense to try to establish a linear relationship between that and the outcome. The data doesn't appear to contain missing information.
+
+Propose a regression model for birthweight: Lasso since 1) helps with the variable selection.
+
+```{r lasso}
+library(glmnet)
+
+
+```
 
