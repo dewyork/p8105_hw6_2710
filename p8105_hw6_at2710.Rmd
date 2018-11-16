@@ -1,7 +1,7 @@
 ---
-title: "Homework 5"
+title: "Homework 6"
 author: "Anusorn Thanataveerat"
-date: "November 1, 2018"
+date: "November 15, 2018"
 output: github_document
 toc: true
 toc_float: true
@@ -24,37 +24,7 @@ knitr::opts_chunk$set(echo = TRUE,
 
 ## Problem 1
 
-```{r Problem_1, message = FALSE}
-file_list <- list.files(path = 'data/', pattern = "*.csv")
-
-#function to read each dataset and create id and group variable
-read_add_id_arm <- function(x){
-  read_csv(paste('data/', x, sep = '')) %>% 
-    mutate(id = str_sub(x, 5, 6), arm = str_sub(x, 1, 3))
-}
-
-  map_df(.x = file_list, ~ read_add_id_arm(.x)) %>% 
-  gather(key = week, value = value, week_1:week_8) %>% 
-  separate(week, into = c('remove', 'week'), sep = '_') %>% 
-  select(id, arm, everything(), -remove) %>% 
-  mutate(arm = as.factor(arm)) %>% 
-  #Spaghetti plot
-  ggplot(aes(x = as.numeric(week), y = value, color = arm,
-  group = interaction(arm, id))) + 
-  geom_line() + xlab('Week') + 
-  geom_smooth(aes(group = arm),
-  method = "lm", se = FALSE) +
-  scale_color_discrete(name = "Study Arm",
-                       breaks = c("con", "exp"),
-                      labels = c("Control", "Experimental"))
-
-```
-
-**Answer**: Whatever value it is they are measuring, those in experimental arm increase over time while people in the control arm didn't see any increase within the 8-week duration under study. In fact, if you look at the trend line, the average value of the outcome decrease at the end of week 8.
-  
-## Problem 2  
-  
-``` {r Problem_2, message = FALSE}
+``` {r Problem_1, message = FALSE}
 homicide_dat <-
   read_csv('https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv') %>% 
   mutate(reported_date = ymd(reported_date), 
