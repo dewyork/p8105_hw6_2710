@@ -82,6 +82,7 @@ glm_or_ci_function <- function(dat){
  ORs_df %>% 
    select(-data) %>% 
    unnest() %>% 
+   mutate(city_state = fct_reorder(city_state, OR)) %>%  
    ggplot(aes(x = city_state, y = OR)) +
    geom_pointrange(aes(ymin = conf.low, ymax = conf.high)) +
    geom_hline(yintercept = 1, linetype = "dotdash", 
@@ -90,9 +91,27 @@ glm_or_ci_function <- function(dat){
    xlab('') +
    ggtitle('non-white vs white') +
    theme(axis.text.x = element_text(color = "blue", size = 8, angle = 90))
-
 ```
-Comment: The odds of solving crimes for non-white victims are lower in every city except Baton Rough, LA and Tampa, FL. However, the odds for those two cities are not statistically higher. On the other hand, a majority of cities has lower odds for solving cases for non-white vicitims with statistical significance such as Birmingham, AL, Baltimore, MD, Buffalo, NY and Tulsa, OK. Among the cities with dismal odds for non-white victims, Boston, MA seems to have worst odds for solving crimes if the victims are non-white.
+
+Comment: The odds of solving crimes for non-white victims are lower in every city except Durham, NC, Birminngham, AL and Tampa, FL. However, the odds for those three cities are not statistically higher. On the other hand, a majority of cities has lower odds for solving cases for non-white vicitims with statistical significance (here is the list)
+```{r}
+ORs_df %>% 
+   select(-data) %>% 
+   unnest() %>% 
+  filter(conf.high < 1) %>% 
+  select(city_state) %>% 
+  kable()
+```
+
+Among the cities with dismal odds for non-white victims, Boston, MA seems to have worst odds for solving crimes if the victims are non-white.
+```{r}
+ORs_df %>% 
+  select(-data) %>% 
+  unnest() %>% 
+  arrange(OR) %>% 
+  slice(1)
+```
+
 
 ## Problem 2
 ```{r data_cleaning}
@@ -104,7 +123,7 @@ dat <- read_csv('data/birthweight.csv') %>%
   select(-smoken)
 ```
 
-First I created a new smoking variable (binary) from `smoken` since the data is zero heavy and wouldn't make much sense to try to establish a linear relationship between `smoken` and the outcome. Next I checked the missingness in the dataset and it appear to contain no missing information.
+First I created a new smoking variable (binary) from `smoken` since the data is zero heavy and wouldn't make much sense to try to establish a linear relationship between `smoken` and the outcome. Next I checked the missingness in the dataset and it appeared to contain no missing information.
 
 I proposed a Lasso model to predict the birth weight since the algorithm takes care of predictors selection by regularizing the coefficient estimates of the predictors that are not predictive and also reduce the variance of the prediction. The method is data driven and therefore doesn't rely on any hypotheses.
 
@@ -130,7 +149,7 @@ lasso_mod <- glmnet(x_train, y_train, alpha = 1, lambda = best_cv)
 ```
 
 ##Modeling Process
-First I split the dataset into traing and test set with 80:20 allocation. Then using the training set, I came up with the optimal lambda (tuning parameter) which minimize the MSE using he cross-validation method. The best lamda derived is `r best_cv`. and the model estimates are:
+First I split the dataset into traing and test set with 80:20 allocation. Then using the training set, I came up with the optimal lambda (tuning parameter) which minimize the MSE using the cross-validation method. The best lamda derived is `r best_cv`. and the model estimates are:
 ```{r}
 lasso_mod %>% tidy() %>% kable()
 ```
@@ -188,7 +207,7 @@ lasso_mod_func <- function(train, test){
   x_test <- model.matrix(bwt ~ . -id, test)[, -1]
   y_test <- test$bwt
   predicted <- predict(lasso_mod, x_test)
-  rmse_lasso_mod <- sqrt((sum(predicted - y_test)^2)/length(y_test))
+  rmse_lasso_mod <- sqrt(sum((predicted - y_test)^2)/length(y_test))
   return(rmse_lasso_mod)
 }
 
@@ -205,7 +224,8 @@ cv_df %>%
   gather(key = model, value = rmse) %>% 
   mutate(model = str_replace(model, "rmse_", ""),
          model = fct_inorder(model)) %>% 
-  ggplot(aes(x = model, y = rmse)) + geom_violin()
+  ggplot(aes(x = model, y = rmse)) + geom_violin() +
+  ylab('RMSE') + xlab('')
 ```
 
-Comment of the violin figure
+My Lasso model performed better- with an average RMSE from the CV process `r round(mean(cv_df$rmse_lasso_mod),0)`- than the linear model with interaction terms (mean RMSE = `r round(mean(cv_df$rmse_lin_interact_mod),0)`) which in turn performed better than the linear model without the interaction term (mean RMSE = `r round(mean(cv_df$rmse_lin_main_mod),0)`). 
